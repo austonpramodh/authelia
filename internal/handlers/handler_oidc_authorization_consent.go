@@ -64,6 +64,8 @@ func handleOIDCAuthorizationConsent(ctx *middlewares.AutheliaCtx, issuer *url.UR
 
 		return nil, true
 	default:
+		ctx.Logger.WithFields(map[string]any{"amr": fmt.Sprintf("%+v", userSession.AuthenticationMethodRefs), "client_id": client.GetID(), "policy": policy}).Debug("Auth Insufficient")
+
 		if subject, err = ctx.Providers.OpenIDConnect.GetSubject(ctx, client.GetSectorIdentifierURI(), userSession.Username); err != nil {
 			ctx.Logger.Errorf(logFmtErrConsentCantGetSubject, requester.GetID(), client.GetID(), client.GetConsentPolicy(), userSession.Username, client.GetSectorIdentifierURI(), err)
 
@@ -218,7 +220,7 @@ func handleOIDCAuthorizationConsentPromptLoginRedirect(ctx *middlewares.Authelia
 	http.Redirect(rw, r, redirectionURL.String(), http.StatusFound)
 }
 
-func handleOIDCAuthorizationConsentGetRedirectionURL(_ *middlewares.AutheliaCtx, issuer *url.URL, consent *model.OAuth2ConsentSession) (redirectURL *url.URL) {
+func handleOIDCAuthorizationConsentGetRedirectionURL(ctx *middlewares.AutheliaCtx, issuer *url.URL, consent *model.OAuth2ConsentSession) (redirectURL *url.URL) {
 	iss := issuer.String()
 
 	if !strings.HasSuffix(iss, "/") {
@@ -232,6 +234,8 @@ func handleOIDCAuthorizationConsentGetRedirectionURL(_ *middlewares.AutheliaCtx,
 	query.Set(queryArgWorkflowID, consent.ChallengeID.String())
 
 	redirectURL.RawQuery = query.Encode()
+
+	ctx.Logger.WithField("url", redirectURL).Debug("Redirection URL Determined")
 
 	return redirectURL
 }

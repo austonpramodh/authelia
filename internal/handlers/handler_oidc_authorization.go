@@ -1,11 +1,10 @@
 package handlers
 
 import (
+	oauthelia2 "authelia.com/provider/oauth2"
 	"errors"
 	"net/http"
 	"net/url"
-
-	oauthelia2 "authelia.com/provider/oauth2"
 
 	"github.com/authelia/authelia/v4/internal/authentication"
 	"github.com/authelia/authelia/v4/internal/middlewares"
@@ -14,12 +13,12 @@ import (
 	"github.com/authelia/authelia/v4/internal/session"
 )
 
-// OpenIDConnectAuthorization handles GET/POST requests to the OpenID Connect 1.0 Authorization endpoint.
+// OpenIDConnectAuthorizationGET handles GET/POST requests to the OpenID Connect 1.0 Authorization endpoint.
 //
 // https://openid.net/specs/openid-connect-core-1_0.html#AuthorizationEndpoint
 //
 //nolint:gocyclo
-func OpenIDConnectAuthorization(ctx *middlewares.AutheliaCtx, rw http.ResponseWriter, r *http.Request) {
+func OpenIDConnectAuthorizationGET(ctx *middlewares.AutheliaCtx, rw http.ResponseWriter, r *http.Request) {
 	var (
 		requester oauthelia2.AuthorizeRequester
 		responder oauthelia2.AuthorizeResponder
@@ -159,6 +158,32 @@ func OpenIDConnectAuthorization(ctx *middlewares.AutheliaCtx, rw http.ResponseWr
 	}
 
 	ctx.Providers.OpenIDConnect.WriteAuthorizeResponse(ctx, rw, requester, responder)
+}
+
+// OpenIDConnectAuthorizationPOST handles redirecting users to use the GET request to ensure the session cookie is
+// included if available.
+func OpenIDConnectAuthorizationPOST(ctx *middlewares.AutheliaCtx, rw http.ResponseWriter, r *http.Request) {
+	var err error
+
+	if err = r.ParseMultipartForm(1 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+		requester := oauthelia2.NewAuthorizeRequest()
+
+		ctx.Logger.WithError(err).Errorf("Authorization Request with id '%s' had an error parsing a multipart form.", requester.GetID())
+
+		ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, err)
+
+		return
+	}
+
+	query := r.Form
+
+	redirectURL := ctx.RootURL()
+
+	redirectURL = redirectURL.JoinPath(oidc.EndpointPathAuthorization)
+
+	redirectURL.RawQuery = query.Encode()
+
+	http.Redirect(rw, r, redirectURL.String(), http.StatusFound)
 }
 
 // OpenIDConnectPushedAuthorizationRequest handles POST requests to the OAuth 2.0 Pushed Authorization Requests endpoint.
